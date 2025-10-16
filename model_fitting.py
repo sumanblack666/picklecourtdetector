@@ -59,38 +59,47 @@ class ModelFitting:
         return lines_horizontal, lines_vertical
 
     def _find_best_model_ransac(self):
+        if len(self.lines_horizontal) < 2 or len(self.lines_vertical) < 2:
+            return None, float('-inf')
+
         best_model = None
         score_max = float('-inf')
 
-        for _ in range(self.ransac_iterations):
-            if len(self.lines_horizontal) < 2 or len(self.lines_vertical) < 2:
-                continue
+        def _line_distance_from_origin(line: Line) -> float:
+            params = line.get_parameterized()
+            return abs(params[2])
 
-            h_lines = random.sample(self.lines_horizontal, 2)
-            v_lines = random.sample(self.lines_vertical, 2)
+        model_corners = [
+            PickleballCourtModel.keypoints['top_left_corner'],
+            PickleballCourtModel.keypoints['top_right_corner'],
+            PickleballCourtModel.keypoints['bottom_left_corner'],
+            PickleballCourtModel.keypoints['bottom_right_corner'],
+        ]
+        pts_src = np.array([mc[:2] for mc in model_corners], dtype=np.float32)
+
+        for _ in range(self.ransac_iterations):
+            h_lines = sorted(random.sample(self.lines_horizontal, 2), key=_line_distance_from_origin)
+            v_lines = sorted(random.sample(self.lines_vertical, 2), key=_line_distance_from_origin)
 
             p1 = Line.solve_intersection(h_lines[0], v_lines[0])
             p2 = Line.solve_intersection(h_lines[0], v_lines[1])
             p3 = Line.solve_intersection(h_lines[1], v_lines[0])
             p4 = Line.solve_intersection(h_lines[1], v_lines[1])
 
-            if any(p is None for p in [p1, p2, p3, p4]):
+            points = [p1, p2, p3, p4]
+            if any(p is None for p in points):
                 continue
 
-            # For simplicity, we'll use the four outer corners of the court model
-            model_corners = [
-                PickleballCourtModel.keypoints['top_left_corner'],
-                PickleballCourtModel.keypoints['top_right_corner'],
-                PickleballCourtModel.keypoints['bottom_left_corner'],
-                PickleballCourtModel.keypoints['bottom_right_corner']
-            ]
+            pts_dest = np.stack(points).astype(np.float32)
+            if not np.all(np.isfinite(pts_dest)):
+                continue
 
-            pts_src = np.array([mc[:2] for mc in model_corners])
-            pts_dest = np.array([p1[:2], p2[:2], p3[:2], p4[:2]])
+            if not self._validate_quadrilateral(pts_dest):
+                continue
 
             H, status = cv2.findHomography(pts_src, pts_dest, cv2.RANSAC, self.ransac_threshold)
 
-            if H is None:
+            if H is None or status is None:
                 continue
 
             score = self._evaluate_model(H)
@@ -100,6 +109,33 @@ class ModelFitting:
                 best_model = H
 
         return best_model, score_max
+
+    def _validate_quadrilateral(self, pts):
+        if pts.shape[0] != 4:
+            return False
+        
+        for i in range(4):
+            for j in range(i + 1, 4):
+                dist = np.linalg.norm(pts[i] - pts[j])
+                if dist < 10:
+                    return False
+        
+        area = self._compute_quadrilateral_area(pts)
+        if area < 1000:
+            return False
+        
+        return True
+
+    def _compute_quadrilateral_area(self, pts):
+        x = pts[:, 0]
+        y = pts[:, 1]
+        area = 0.5 * abs(
+            x[0] * y[1] - x[1] * y[0] +
+            x[1] * y[2] - x[2] * y[1] +
+            x[2] * y[3] - x[3] * y[2] +
+            x[3] * y[0] - x[0] * y[3]
+        )
+        return area
 
     def _evaluate_model(self, H):
         score = 0

@@ -25,9 +25,13 @@ def draw_court_model_to_img(img, H):
 
     for name, point in PickleballCourtModel.keypoints.items():
         point_t = np.matmul(H, np.array([point[0], point[1], 1]))
+        if abs(point_t[2]) < 1e-6:
+            continue
         point_t = point_t / point_t[2]
-        cv2.circle(img, (int(point_t[0]), int(point_t[1])), 5, (0, 0, 255), -1)
-        cv2.putText(img, name, (int(point_t[0]), int(point_t[1]) - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1, cv2.LINE_AA)
+        x, y = int(point_t[0]), int(point_t[1])
+        if 0 <= x < img.shape[1] and 0 <= y < img.shape[0]:
+            cv2.circle(img, (x, y), 5, (0, 0, 255), -1)
+            cv2.putText(img, name, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 255), 1, cv2.LINE_AA)
 
     return img
 
@@ -35,13 +39,22 @@ def _draw_court_model_lines_to_img(img, H, court_model_lines):
     for line in court_model_lines:
         start_pt_t = np.matmul(H, np.array([line.start_pt[0], line.start_pt[1], 1]))
         end_pt_t = np.matmul(H, np.array([line.end_pt[0], line.end_pt[1], 1]))
+        
+        if abs(start_pt_t[2]) < 1e-6 or abs(end_pt_t[2]) < 1e-6:
+            continue
+            
         start_pt_t = start_pt_t / start_pt_t[2]
         end_pt_t = end_pt_t / end_pt_t[2]
 
-        mid_pt = (int((start_pt_t[0] + end_pt_t[0]) / 2), int((start_pt_t[1] + end_pt_t[1]) / 2))
-        cv2.putText(img, str(line.id), mid_pt, cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 1, cv2.LINE_AA)
-
-        cv2.line(img, (int(start_pt_t[0]), int(start_pt_t[1])), (int(end_pt_t[0]), int(end_pt_t[1])), (255, 255, 0), 2)
+        x1, y1 = int(start_pt_t[0]), int(start_pt_t[1])
+        x2, y2 = int(end_pt_t[0]), int(end_pt_t[1])
+        
+        mid_pt = ((x1 + x2) // 2, (y1 + y2) // 2)
+        
+        cv2.line(img, (x1, y1), (x2, y2), (0, 255, 255), 3)
+        
+        if 0 <= mid_pt[0] < img.shape[1] and 0 <= mid_pt[1] < img.shape[0]:
+            cv2.putText(img, str(line.id), mid_pt, cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2, cv2.LINE_AA)
 
 
 def load_H_matrix(file_path:Path):
