@@ -54,6 +54,9 @@ def detect(image_path: Path, target_h: int = 960) -> DetectionResult:
         model_fitting,
     )
 
+    if best_model is None:
+        raise RuntimeError("Court detection failed: insufficient line correspondences.")
+
     annotated_image = np.array(img)
     draw_lines(annotated_image, model_fitting.lines_horizontal)
     draw_lines(annotated_image, model_fitting.lines_vertical)

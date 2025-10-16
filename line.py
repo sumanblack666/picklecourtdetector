@@ -194,11 +194,13 @@ class Line:
     def solve_intersection(line_A, line_B):
         '''
         Solve intersection of two lines.
+        Returns None if the lines are parallel.
         '''
-        # handle determinant = 0
-
         a = np.array([[line_A.A, line_A.B], [line_B.A, line_B.B]])
         b = np.array([-line_A.C, -line_B.C])
-        return np.linalg.solve(a, b)    
+        try:
+            return np.linalg.solve(a, b)
+        except np.linalg.LinAlgError:
+            return None    
 
 
